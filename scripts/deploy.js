@@ -1,18 +1,22 @@
-const hre = require("hardhat");
+const { ethers } = require("hardhat");
+//White list addresses
+//["0xde2f1eaafcfc10f39e35385e6c35e46f55776f77","0x21c1c4469dc281fb086350801df418bbc37a3173","0x120212c1f712f8C7ad3590BF82139849c810236C",]
+
+//White list root
+// 0x4142d58fc55b360739e8e3157c1ec98c358cc8772824cb873d5d72cc59ace474
+
+//Deploy
 //npx hardhat run scripts/deploy.js --network sepolia
-// 0x9E86541d82B874E0d813d1b0a90e2B1c80f4c1E5
-//npx hardhat verify 0x9E86541d82B874E0d813d1b0a90e2B1c80f4c1E5 --network sepolia "KErmakovich" "KE" "https://data.com/my-collection"
+
+//Verify
+//npx hardhat verify 0xeC1a181BaDB8f35583fC60BF12a2ae5e054eeb98 --network sepolia "0x4142d58fc55b360739e8e3157c1ec98c358cc8772824cb873d5d72cc59ace474"
 async function main() {
-  const NFTCollection = await hre.ethers.getContractFactory("NFTCollection");
-  const nftColl = await NFTCollection.deploy(
-    "KErmakovich",
-    "KE",
-    "https://data.com/my-collection"
-  );
+  const NFTCollection = await ethers.deployContract("NFTCollection", [
+    "0x4142d58fc55b360739e8e3157c1ec98c358cc8772824cb873d5d72cc59ace474",
+  ]);
+  await NFTCollection.waitForDeployment();
 
-  await nftColl.deployed();
-
-  console.log(`Deployed to: ${nftColl.address}`);
+  console.log(`Deployed to ${NFTCollection.target}`);
 }
 
 main().catch((error) => {

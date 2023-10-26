@@ -1,556 +1,320 @@
-const {
-  loadFixture,
-  time,
-} = require("@nomicfoundation/hardhat-network-helpers");
+const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const {
+  treeRoot,
+  ownerHexProof,
+  user0HexProof,
+  user1HexProof,
+  user2HexProof,
+  newTreeRoot,
+} = require("./merkleTree.js");
+
+const ownerQuantity = 2;
+const user1Quantity = 3;
+const notUserQuantity = 10000;
 
 describe("NFTCollection", function () {
-  function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   async function deploy() {
-    const [owner, admin, user] = await ethers.getSigners();
-    const NFTCollection = await ethers.getContractFactory("NFTCollection");
-    const nftColl = await NFTCollection.deploy(
-      "KErmakovich",
-      "KE",
-      "https://data.com/my-collection"
-    );
-    await nftColl.deployed();
+    const [owner, user0, user1, user2, notUser] = await ethers.getSigners();
 
-    return {
-      owner,
-      admin,
-      user,
-      nftColl,
-    };
+    const nftColl = await ethers.deployContract("NFTCollection", [treeRoot]);
+
+    await nftColl.waitForDeployment();
+
+    return { nftColl, owner, user0, user1, user2, notUser };
   }
+  //0xd4453790033a2bd762f526409b7f358023773723d9e9bc42487e4996869162b6
   describe("Check initial values", function () {
-    it("should sets values correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+    it.only("should sets values correctly", async function () {
+      const { owner, user0, user1, nftColl } = await loadFixture(deploy);
+      const [, , _baseURI, _nextTokenId, , mintPaused, addressBalance] =
+        await nftColl.getContractInfo();
 
-      expect(nftColl.address).to.be.properAddress;
+      // console.log(ownerHexProof);
+      console.log("NEW", newTreeRoot);
+
+      expect(nftColl.target).to.be.properAddress;
       expect(await nftColl.owner()).to.eq(owner.address);
+
+      expect(await nftColl.MAX_TOKENS_SUPPLY()).to.eq(10000);
+      expect(await nftColl.PRICE()).to.eq(ethers.parseEther("0.01"));
+      expect(_nextTokenId).to.eq(0);
+      expect(mintPaused).to.be.false;
 
       expect(await nftColl.name()).to.eq("KErmakovich");
       expect(await nftColl.symbol()).to.eq("KE");
-      expect(await nftColl.contractURI()).to.eq(
-        "https://data.com/my-collection"
-      );
-
-      expect(await nftColl.MAX_TOKENS()).to.eq(10000);
-      expect(await nftColl.PRICE()).to.eq(ethers.utils.parseEther("0.01"));
-      expect(await nftColl._tokenIDs()).to.eq(0);
+      expect(_baseURI).to.eq("ipfs://my-collection/");
+      expect(addressBalance).to.eq(0);
     });
   });
 
-  describe("addToWhiteList()", function () {
-    it("should sets addresses correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+  describe("mint()", function () {
+    it("should mint token by the OWNER correctly", async function () {
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
 
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
+      const txMintByOwner = await nftColl
+        .connect(owner)
+        .mint(ownerHexProof, ownerQuantity);
+      await txMintByOwner.wait();
 
-      expect(await nftColl.whiteList(owner.address)).to.eq(true);
-      expect(await nftColl.whiteList(admin.address)).to.eq(true);
-    });
+      const [, , , _nextTokenId, , ,] = await nftColl.getContractInfo();
 
-    it("should revert with 'Can't be 0 address'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      await expect(
-        nftColl.addToWhiteList([owner.address, ethers.constants.AddressZero])
-      ).to.be.revertedWith("Can't be 0 address");
-    });
-
-    it("should revert with 'Ownable: caller is not the owner'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      await expect(
-        nftColl.connect(admin).addToWhiteList([owner.address, admin.address])
-      ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
-  });
-
-  describe("singleMint()", function () {
-    it("should mint token buy the whiteList person correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
-
-      const feeNumerator = 300;
-      const salePrice = 10000;
-
-      const txSingleMint = await nftColl.singleMint(feeNumerator);
-      await txSingleMint.wait();
-
-      const tokenId = Number(await nftColl._tokenIDs());
-
-      expect(tokenId).to.eq(1);
-      expect(await nftColl.ownerOf(0)).to.eq(owner.address);
-
-      const [receiver, royaltyAmount] = await nftColl.royaltyInfo(
-        tokenId - 1,
-        salePrice
-      );
-
-      expect(receiver).to.eq(owner.address);
-      expect(royaltyAmount).to.eq((salePrice * feeNumerator) / 10000);
-    });
-
-    it("should mint token buy the user correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const feeNumerator = 300;
-      const salePrice = 10000;
-
-      const txSingleMint = await nftColl
-        .connect(user)
-        .singleMint(feeNumerator, { value: ethers.utils.parseEther("0.01") });
-      await txSingleMint.wait();
-
-      //Change user balance buy 0.01 ether after minting
-      await expect(() => txSingleMint).to.changeEtherBalance(
-        user,
-        ethers.utils.parseEther("-0.01")
-      );
-
-      const tokenId = Number(await nftColl._tokenIDs());
-
-      expect(tokenId).to.eq(1);
-      expect(await nftColl.ownerOf(0)).to.eq(user.address);
-
-      const [receiver, royaltyAmount] = await nftColl.royaltyInfo(
-        tokenId - 1,
-        salePrice
-      );
-
-      expect(receiver).to.eq(user.address);
-      expect(royaltyAmount).to.eq((salePrice * feeNumerator) / 10000);
-    });
-
-    it("should emit 'NFTMinted'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
-
-      const feeNumerator = 100;
-
-      const tokenId = Number(await nftColl._tokenIDs());
-
-      const txSingleMint = await nftColl.singleMint(feeNumerator);
-      await txSingleMint.wait();
-
-      await expect(txSingleMint)
-        .to.emit(nftColl, "NFTMinted")
-        .withArgs(tokenId, owner.address, feeNumerator);
-    });
-
-    it("should revert with 'Minting is paused", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const feeNumerator = 100;
-
-      const pause = await nftColl.toggleMintPause();
-      await pause.wait();
-
-      await expect(nftColl.singleMint(feeNumerator)).to.be.revertedWith(
-        "Minting is paused"
-      );
-    });
-
-    it("should revert with 'Ether value sent is not correct", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const feeNumerator = 100;
-
-      await expect(
-        nftColl.connect(user).singleMint(feeNumerator)
-      ).to.be.revertedWith("Ether value sent is not correct");
-    });
-  });
-
-  describe("multipleMint()", function () {
-    it("should mint token buy the whiteList person correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
-
-      const feeNumerator = 300;
-      const salePrice = 10000;
-
-      const txmultipleMint = await nftColl.multipleMint(2, feeNumerator);
-      await txmultipleMint.wait();
-
-      const tokenId = Number(await nftColl._tokenIDs());
-
-      expect(tokenId).to.eq(2);
+      expect(_nextTokenId).to.eq(ownerQuantity);
       expect(await nftColl.ownerOf(0)).to.eq(owner.address);
       expect(await nftColl.ownerOf(1)).to.eq(owner.address);
-
-      const [receiver, royaltyAmount] = await nftColl.royaltyInfo(
-        tokenId - 1,
-        salePrice
-      );
-
-      expect(receiver).to.eq(owner.address);
-      expect(royaltyAmount).to.eq((salePrice * feeNumerator) / 10000);
     });
 
-    it("should mint token buy the user correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+    it("should mint token by WHITELISTED person correctly", async function () {
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
 
-      const feeNumerator = 300;
-      const salePrice = 10000;
+      const txMintByUser1 = await nftColl
+        .connect(user1)
+        .mint(user1HexProof, user1Quantity);
+      await txMintByUser1.wait();
 
-      const txmultipleMint = await nftColl
-        .connect(user)
-        .multipleMint(2, feeNumerator, {
-          value: ethers.utils.parseEther("0.02"),
+      const [, , , _nextTokenId, , ,] = await nftColl.getContractInfo();
+
+      expect(_nextTokenId).to.eq(user1Quantity);
+      expect(await nftColl.ownerOf(0)).to.eq(user1.address);
+      expect(await nftColl.ownerOf(1)).to.eq(user1.address);
+
+      await expect(txMintByUser1)
+        .to.emit(nftColl, "Transfer")
+        .withArgs(ethers.ZeroAddress, user1.address, user1Quantity - 1);
+    });
+
+    it("should mint MAX_TOKENS_SUPPLY by NOT WHITELISTED person correctly", async function () {
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
+
+      const txMintByNotUser = await nftColl
+        .connect(notUser)
+        .mint(user1HexProof, notUserQuantity, {
+          value: ethers.parseEther("0.01") * BigInt(notUserQuantity),
         });
-      await txmultipleMint.wait();
+      await txMintByNotUser.wait();
 
-      //Change user balance buy 0.01 * 2 ether after minting
-      await expect(() => txmultipleMint).to.changeEtherBalance(
-        user,
-        ethers.utils.parseEther("-0.02")
-      );
+      const [, , , _nextTokenId, , ,] = await nftColl.getContractInfo();
 
-      const tokenId = Number(await nftColl._tokenIDs());
+      expect(_nextTokenId).to.eq(notUserQuantity);
+      expect(await nftColl.ownerOf(0)).to.eq(notUser.address);
+      expect(await nftColl.ownerOf(9999)).to.eq(notUser.address);
 
-      expect(tokenId).to.eq(2);
-      expect(await nftColl.ownerOf(0)).to.eq(user.address);
-      expect(await nftColl.ownerOf(1)).to.eq(user.address);
-
-      const [receiver, royaltyAmount] = await nftColl.royaltyInfo(
-        tokenId - 1,
-        salePrice
-      );
-
-      expect(receiver).to.eq(user.address);
-      expect(royaltyAmount).to.eq((salePrice * feeNumerator) / 10000);
+      await expect(txMintByNotUser)
+        .to.emit(nftColl, "Transfer")
+        .withArgs(ethers.ZeroAddress, notUser.address, notUserQuantity - 1);
     });
 
-    it("should emit 'NFTMinted'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+    it("should revert with 'Exceeds maximum tokens'", async function () {
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
 
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
+      const maxSupply = await nftColl.MAX_TOKENS_SUPPLY();
 
-      const feeNumerator = 100;
+      const txMintByOwner = nftColl
+        .connect(owner)
+        .mint(ownerHexProof, maxSupply + 1n);
 
-      const tokenId = Number(await nftColl._tokenIDs());
-
-      const txmultipleMint = await nftColl.multipleMint(2, feeNumerator);
-      await txmultipleMint.wait();
-
-      await expect(txmultipleMint)
-        .to.emit(nftColl, "NFTMinted")
-        .withArgs(tokenId, owner.address, feeNumerator);
+      await expect(txMintByOwner).to.be.revertedWith("Exceeds maximum tokens");
     });
 
-    it("should revert with 'Minting is paused", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+    it("should revert with 'Minting is paused'", async function () {
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
 
-      const feeNumerator = 100;
+      const txPause = await nftColl.toggleMintPause();
+      await txPause.wait();
 
-      const pause = await nftColl.toggleMintPause();
-      await pause.wait();
+      const txMintByOwner = nftColl
+        .connect(owner)
+        .mint(ownerHexProof, ownerQuantity);
 
-      await expect(nftColl.multipleMint(2, feeNumerator)).to.be.revertedWith(
-        "Minting is paused"
+      await expect(txMintByOwner).to.be.revertedWith("Minting is paused");
+    });
+
+    it("should revert with 'Ether value sent is not correct'", async function () {
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
+
+      const txMintByNotUser = nftColl
+        .connect(notUser)
+        .mint(user1HexProof, user1Quantity, { value: 0 });
+
+      await expect(txMintByNotUser).to.be.revertedWith(
+        "Ether value sent is not correct"
       );
-    });
-
-    it("should revert with 'Ether value sent is not correct", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const feeNumerator = 100;
-
-      await expect(
-        nftColl.connect(user).multipleMint(2, feeNumerator)
-      ).to.be.revertedWith("Ether value sent is not correct");
     });
   });
 
-  describe("removeFromwhiteList()", function () {
-    it("should remove persom from whiteList correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+  describe("toggleMintPause()", function () {
+    it("should pause mint correctly", async function () {
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
+      const txToggleMintPause = await nftColl.connect(owner).toggleMintPause();
+      await txToggleMintPause.wait();
 
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-        user.address,
-      ]);
-      await txWhiteList.wait();
-
-      const txRemove = await nftColl.removeFromwhiteList([
-        admin.address,
-        user.address,
-      ]);
-      await txRemove.wait();
-
-      expect(await nftColl.whiteList(admin.address)).to.eq(false);
-      expect(await nftColl.whiteList(user.address)).to.eq(false);
+      expect(await nftColl.mintPaused()).to.be.true;
     });
 
-    it("should revert with 'Ownable: caller is not the owner'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+    it("should revert if called not by the owner", async function () {
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
 
-      await expect(
-        nftColl
-          .connect(admin)
-          .removeFromwhiteList([owner.address, admin.address])
-      ).to.be.revertedWith("Ownable: caller is not the owner");
+      const txToggleMintPause = nftColl.connect(user0).toggleMintPause();
+
+      await expect(txToggleMintPause).to.be.revertedWithCustomError(
+        nftColl,
+        "OwnableUnauthorizedAccount"
+      );
     });
   });
 
   describe("sendToken()", function () {
+    const tokenId = 0;
     it("should send token correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
 
-      const tokenId = Number(await nftColl._tokenIDs());
+      const txMintByOwner = await nftColl
+        .connect(user1)
+        .mint(user1HexProof, ownerQuantity);
+      await txMintByOwner.wait();
 
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
+      const txApproveFromUser1ToOwner = await nftColl
+        .connect(user1)
+        .approve(owner.address, tokenId);
+      await txApproveFromUser1ToOwner.wait();
 
-      const feeNumerator = 300;
-
-      const txSingleMint = await nftColl.singleMint(feeNumerator);
-      await txSingleMint.wait();
-
-      const txSend = await nftColl.sendToken(admin.address, tokenId);
-      await txSend.wait();
-
-      expect(await nftColl.ownerOf(tokenId)).to.eq(admin.address);
-    });
-
-    it("should revert with 'Ownable: caller is not the owner'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const tokenId = Number(await nftColl._tokenIDs());
-
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
-
-      const feeNumerator = 300;
-
-      const txSingleMint = await nftColl.singleMint(feeNumerator);
-      await txSingleMint.wait();
-
-      await expect(
-        nftColl.connect(admin).sendToken(admin.address, tokenId)
-      ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
-
-    it("should revert with 'Token does not exist'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      await expect(nftColl.sendToken(admin.address, 0)).to.be.revertedWith(
-        "Token does not exist"
+      const txSendToken = await nftColl.sendToken(
+        user1.address,
+        user0.address,
+        tokenId
       );
+      await txSendToken.wait();
+
+      expect(await nftColl.ownerOf(tokenId)).to.eq(user0.address);
+    });
+
+    it("should revert if called not by the owner", async function () {
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
+
+      const txMintByOwner = await nftColl
+        .connect(user1)
+        .mint(user1HexProof, ownerQuantity);
+      await txMintByOwner.wait();
+
+      const txApproveFromUser1ToOwner = await nftColl
+        .connect(user1)
+        .approve(owner.address, tokenId);
+      await txApproveFromUser1ToOwner.wait();
+
+      const txSendToken = nftColl
+        .connect(user0)
+        .sendToken(user1.address, user0.address, tokenId);
+
+      await expect(txSendToken).to.be.revertedWithCustomError(
+        nftColl,
+        "OwnableUnauthorizedAccount"
+      );
+    });
+
+    it("should revert with 'Token does not exists'", async function () {
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
+
+      const txSendToken = nftColl.sendToken(
+        user1.address,
+        user0.address,
+        tokenId
+      );
+
+      await expect(txSendToken).to.be.revertedWith("Token does not exists");
     });
   });
 
   describe("changeOwner()", function () {
     it("should change owner correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
 
-      const txChange = await nftColl.changeOwner(user.address);
-      await txChange.wait();
+      const txChangeOwner = await nftColl.changeOwner(user0.address);
+      await txChangeOwner.wait();
 
-      expect(await nftColl.owner()).to.eq(user.address);
+      expect(await nftColl.owner()).to.eq(user0.address);
     });
 
-    it("should revert with 'Ownable: caller is not the owner'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+    it("should revert if called not by the owner", async function () {
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
 
-      await expect(
-        nftColl.connect(user).changeOwner(user.address)
-      ).to.be.revertedWith("Ownable: caller is not the owner");
+      const txChangeOwner = nftColl.connect(user0).changeOwner(user0.address);
+
+      await expect(txChangeOwner).to.be.revertedWithCustomError(
+        nftColl,
+        "OwnableUnauthorizedAccount"
+      );
+    });
+  });
+
+  describe("updateRoot()", function () {
+    it("should update root correctly", async function () {
+      const { nftColl, owner, user0, user1, user2 } = await loadFixture(deploy);
+
+      const txUpdateRoot = await nftColl.connect(owner).updateRoot(newTreeRoot);
+      await txUpdateRoot.wait();
+
+      expect(await nftColl.whiteListAddressRoot()).to.eq(newTreeRoot);
+    });
+
+    it("should revert if called not by the owner", async function () {
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
+
+      const txUpdateRoot = nftColl.connect(user0).updateRoot(newTreeRoot);
+
+      await expect(txUpdateRoot).to.be.revertedWithCustomError(
+        nftColl,
+        "OwnableUnauthorizedAccount"
+      );
     });
   });
 
   describe("withdraw()", function () {
     it("should withdraws correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-      const feeNumerator = 300;
-      const salePrice = 10000;
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
 
-      const txSingleMint = await nftColl
-        .connect(user)
-        .singleMint(feeNumerator, { value: ethers.utils.parseEther("0.01") });
-      await txSingleMint.wait();
+      const txMintByNotUser = await nftColl
+        .connect(notUser)
+        .mint(user1HexProof, notUserQuantity, {
+          value: ethers.parseEther("0.01") * BigInt(notUserQuantity),
+        });
+      await txMintByNotUser.wait();
 
-      const txWithdraw = await nftColl.withdraw();
+      const contractBalance = await ethers.provider.getBalance(nftColl.target);
+
+      const txWithdraw = await nftColl.connect(owner).withdraw();
       await txWithdraw.wait();
 
-      await expect(txWithdraw).to.changeEtherBalance(
-        owner,
-        ethers.utils.parseEther("0.01")
-      );
+      await expect(txWithdraw).to.changeEtherBalance(owner, contractBalance);
     });
 
     it("should revert with 'Nothing to withdraw'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
 
-      await expect(nftColl.withdraw()).to.be.revertedWith(
-        "Nothing to withdraw"
+      const txWithdraw = nftColl.connect(owner).withdraw();
+
+      await expect(txWithdraw).to.be.revertedWith("Nothing to withdraw");
+    });
+
+    it("should revert if called not by the owner", async function () {
+      const { nftColl, owner, user0, user1, user2, notUser } =
+        await loadFixture(deploy);
+
+      const txWithdraw = nftColl.connect(user0).withdraw();
+
+      await expect(txWithdraw).to.be.revertedWithCustomError(
+        nftColl,
+        "OwnableUnauthorizedAccount"
       );
-    });
-
-    it("should revert with 'Ownable: caller is not the owner'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      await expect(nftColl.connect(admin).withdraw()).to.be.revertedWith(
-        "Ownable: caller is not the owner"
-      );
-    });
-  });
-
-  describe("setTokenURI()", function () {
-    it("should set tokenURI correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
-      const tokenId = await nftColl._tokenIDs();
-
-      const feeNumerator = 300;
-      const tokenURI = `https://data.com/my-collection/${tokenId}`;
-
-      const txSingleMint = await nftColl.singleMint(feeNumerator);
-      await txSingleMint.wait();
-
-      const txSet = await nftColl.setTokenURI(0, tokenURI);
-      await txSet.wait();
-
-      expect(await nftColl.tokenURI(tokenId)).to.eq(tokenURI);
-    });
-
-    it("should revert with 'You're not an owner of the token'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
-      const tokenId = await nftColl._tokenIDs();
-
-      const feeNumerator = 300;
-      const tokenURI = `https://data.com/my-collection/${tokenId}`;
-
-      const txSingleMint = await nftColl.singleMint(feeNumerator);
-      await txSingleMint.wait();
-
-      await expect(
-        nftColl.connect(user).setTokenURI(0, tokenURI)
-      ).to.be.revertedWith("You're not an owner of the token");
-    });
-  });
-
-  describe("getTokenURI()", function () {
-    it("should get tokenURI correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const txWhiteList = await nftColl.addToWhiteList([
-        owner.address,
-        admin.address,
-      ]);
-      await txWhiteList.wait();
-      const tokenId = await nftColl._tokenIDs();
-
-      const feeNumerator = 300;
-      const tokenURI = `https://data.com/my-collection/${tokenId}`;
-
-      const txSingleMint = await nftColl.singleMint(feeNumerator);
-      await txSingleMint.wait();
-
-      const txSet = await nftColl.setTokenURI(0, tokenURI);
-      await txSet.wait();
-
-      expect(await nftColl.getTokenURI(0)).to.eq(tokenURI);
-    });
-  });
-
-  describe("setContractURI()", function () {
-    it("should get contractURI correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const txSetContractURI = await nftColl.setContractURI("https://some.com");
-      await txSetContractURI.wait();
-
-      expect(await nftColl.contractURI()).to.eq("https://some.com");
-    });
-
-    it("should revert with 'Ownable: caller is not the owner'", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      await expect(
-        nftColl.connect(admin).setContractURI("https://some.com")
-      ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
-  });
-
-  describe("getContractInfo()", function () {
-    it("should get contract info correctly", async function () {
-      const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-      const [
-        name,
-        symbol,
-        _tokenIDs,
-        mintPaused,
-        ownerAddr,
-        balance,
-        contractURI,
-      ] = await nftColl.getContractInfo();
-
-      expect(name).to.eq(await nftColl.name());
-      expect(symbol).to.eq(await nftColl.symbol());
-      expect(_tokenIDs).to.eq(await nftColl._tokenIDs());
-      expect(mintPaused).to.eq(false);
-      expect(ownerAddr).to.eq(owner.address);
-      expect(balance).to.eq(0);
-      expect(contractURI).to.eq(await nftColl.contractURI());
-    });
-
-    describe("getContractInfo()", function () {
-      it("should get contract info correctly", async function () {
-        const { owner, admin, user, nftColl } = await loadFixture(deploy);
-
-        expect(await nftColl.supportsInterface(0x49064906)).to.eq(true);
-      });
     });
   });
 });
