@@ -117,15 +117,15 @@ _Retrieves information about the contract._
 
 #### Return Values
 
-| Name | Type    | Description                                                   |
-| ---- | ------- | ------------------------------------------------------------- |
-| [0]  | string  | - name: The name of the token.                                |
-| [1]  | string  | - symbol: The symbol of the token.                            |
-| [2]  | string  | - baseURI: The base URI of the token.                         |
-| [3]  | uint256 | - nextTokenId: The next token ID to be minted.                |
-| [4]  | address | - owner: The address of the contract owner.                   |
-| [5]  | bool    | - mintPaused: A boolean indicating whether minting is paused. |
-| [6]  | uint256 | - balance: The balance of Ether held by the contract.         |
+| Name        | Type    | Description                                     |
+| ----------- | ------- | ----------------------------------------------- |
+| name        | string  | The name of the token.                          |
+| symbol      | string  | The symbol of the token.                        |
+| baseURI     | string  | The base URI of the token.                      |
+| nextTokenId | uint256 | The next token ID to be minted.                 |
+| owner       | address | The address of the contract owner.              |
+| mintPaused  | bool    | A boolean indicating whether minting is paused. |
+| balance     | uint256 | The balance of Ether held by the contract.      |
 
 ### receive
 
