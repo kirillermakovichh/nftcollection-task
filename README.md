@@ -103,9 +103,9 @@ _Returns the base URI for the NFT metadata._
 
 #### Return Values
 
-| Name | Type   | Description |
-| ---- | ------ | ----------- |
-| [0]  | string | baseURI:    |
+| Name    | Type   | Description                |
+| ------- | ------ | -------------------------- |
+| baseURI | string | The base URI of the token. |
 
 ### getContractInfo
 
