@@ -1,7 +1,3 @@
-The tokenURI is a function specified in the ERC-721 standard for non-fungible tokens (NFTs) on the Ethereum blockchain. The purpose of the tokenURI function is to return a Uniform Resource Identifier (URI) for a given token ID, which can be a URL or other form of URI that points to a JSON file. This JSON file is expected to hold metadata about the token.
-
-The royaltyInfo returns how much royalty is owed and to whom, based on a sale price that may be denominated in any unit of exchange. The royalty amount is denominated and should be paid in that same unit of exchange.
-
 # Solidity API
 
 ## NFTCollection
@@ -52,7 +48,6 @@ _Mints NFTs to the caller._
 | -------- | --------- | ----------------------------------------- |
 | proof    | bytes32[] | The proof of inclusion for the whitelist. |
 | quantity | uint256   | The number of tokens to mint.             |
-
 
 ### toggleMintPause
 
@@ -122,15 +117,15 @@ _Retrieves information about the contract._
 
 #### Return Values
 
-| Name | Type    | Description                                                                                                                                                                                                                                                                                                            |
-| ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [0]  | string  | - name: The name of the token.      |
-| [1]  | string  | - symbol: The symbol of the token.                                                                                                                                                                                                                                                                                                                    |
-| [2]  | string  | - baseURI: The base URI of the token.                                                                                                                                                                                                                                                                                                                       |
-| [3]  | uint256 | - nextTokenId: The next token ID to be minted.                                                                                                                                                                                                                                                                                                                 |
-| [4]  | address | - owner: The address of the contract owner.                                                                                                                                                                                                                                                                                                                      |
-| [5]  | bool    | - mintPaused: A boolean indicating whether minting is paused.                                                                                                                                                                                                                                                                                                                      |
-| [6]  | uint256 | - balance: The balance of Ether held by the contract.                                                                                                                                                                                                                                                                                                                      |
+| Name | Type    | Description                                                   |
+| ---- | ------- | ------------------------------------------------------------- |
+| [0]  | string  | - name: The name of the token.                                |
+| [1]  | string  | - symbol: The symbol of the token.                            |
+| [2]  | string  | - baseURI: The base URI of the token.                         |
+| [3]  | uint256 | - nextTokenId: The next token ID to be minted.                |
+| [4]  | address | - owner: The address of the contract owner.                   |
+| [5]  | bool    | - mintPaused: A boolean indicating whether minting is paused. |
+| [6]  | uint256 | - balance: The balance of Ether held by the contract.         |
 
 ### receive
 
