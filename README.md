@@ -53,21 +53,6 @@ _Mints NFTs to the caller._
 | proof    | bytes32[] | The proof of inclusion for the whitelist. |
 | quantity | uint256   | The number of tokens to mint.             |
 
-### sendToken
-
-```solidity
-function sendToken(address from, address to, uint256 tokenId) external
-```
-
-_Sends a token from the caller to a specified address._
-
-#### Parameters
-
-| Name    | Type    | Description                         |
-| ------- | ------- | ----------------------------------- |
-| from    | address | The address to send the token from. |
-| to      | address | The address to send the token to.   |
-| tokenId | uint256 | The ID of the token to send.        |
 
 ### toggleMintPause
 

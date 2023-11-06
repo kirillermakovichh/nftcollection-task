@@ -48,21 +48,6 @@ contract NFTCollection is ERC721A, Ownable {
     }
 
     /**
-     * @dev Sends a token from the caller to a specified address.
-     * @param from The address to send the token from.
-     * @param to The address to send the token to.
-     * @param tokenId The ID of the token to send.
-     */
-    function sendToken(
-        address from,
-        address to,
-        uint256 tokenId
-    ) external onlyOwner {
-        require(_exists(tokenId), "Token does not exists");
-        safeTransferFrom(from, to, tokenId, "");
-    }
-
-    /**
      * @dev Toggles the mint pause state.
      */
     function toggleMintPause() external onlyOwner {
